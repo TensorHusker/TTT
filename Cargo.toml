@@ -1,0 +1,33 @@
+[package]
+name = "ttt"
+version = "0.1.0"
+edition = "2021"
+description = "Tiny Type Theory - A categorical kernel of dependent types"
+license = "MIT"
+authors = ["Alaina Scott"]
+repository = "https://github.com/TensorHusker/TTT"
+keywords = ["type-theory", "dependent-types", "verification", "proof-assistant", "no-std"]
+categories = ["mathematics", "embedded", "no-std"]
+
+[features]
+default = ["std"]
+std = ["proptest?/std"]
+
+[dependencies]
+proptest = { version = "1.4", optional = true, default-features = false }
+
+[dev-dependencies]
+proptest = { version = "1.4", default-features = false }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
+
+[[bin]]
+name = "ttt"
+path = "src/main.rs"
+required-features = ["std"]
