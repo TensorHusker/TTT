@@ -8,7 +8,7 @@
 #![cfg(feature = "lean-integration")]
 
 use ttt::core::{Term, Level};
-use ttt::lean::{LeanTerm, LeanLevel, LeanName, LeanBridge, TranslationContext};
+use ttt::lean::{LeanTerm, LeanLevel, LeanName, LeanTranslator};
 use proptest::prelude::*;
 use std::collections::{HashMap, HashSet};
 use pretty_assertions::assert_eq;
@@ -26,14 +26,14 @@ use crate::generators::*;
 #[test]
 fn formal_homomorphism_property() {
     proptest!(|(t1 in arb_term(), t2 in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Test application homomorphism
         let app_term = Term::app(t1.clone(), t2.clone());
         if let (Ok(lean_t1), Ok(lean_t2), Ok(lean_app)) = (
-            bridge.translate_to_lean(&t1),
-            bridge.translate_to_lean(&t2),
-            bridge.translate_to_lean(&app_term)
+            translator.to_lean(&t1),
+            translator.to_lean(&t2),
+            translator.to_lean(&app_term)
         ) {
             if let LeanTerm::App(f, x) = lean_app {
                 prop_assert_eq!(*f, lean_t1);
@@ -46,9 +46,9 @@ fn formal_homomorphism_property() {
         // Test Pi type homomorphism
         let pi_term = Term::pi(t1.clone(), t2.clone());
         if let (Ok(lean_t1), Ok(lean_t2), Ok(lean_pi)) = (
-            bridge.translate_to_lean(&t1),
-            bridge.translate_to_lean(&t2),
-            bridge.translate_to_lean(&pi_term)
+            translator.to_lean(&t1),
+            translator.to_lean(&t2),
+            translator.to_lean(&pi_term)
         ) {
             if let LeanTerm::Pi(_, dom, cod) = lean_pi {
                 prop_assert_eq!(**dom, lean_t1);
@@ -69,11 +69,11 @@ fn formal_homomorphism_property() {
 #[test]
 fn formal_functor_laws() {
     proptest!(|(term in arb_closed_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Identity functor law: translating identity transformation preserves structure
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
-            if let Ok(recovered) = bridge.translate_from_lean(&lean_term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
+            if let Ok(recovered) = translator.from_lean(&lean_term) {
                 prop_assert_eq!(term, recovered);
             }
         }
@@ -84,7 +84,7 @@ fn formal_functor_laws() {
             term.clone()
         );
 
-        if let Ok(lean_composed) = bridge.translate_to_lean(&composed_term) {
+        if let Ok(lean_composed) = translator.to_lean(&composed_term) {
             // Verify the composition structure is preserved
             match lean_composed {
                 LeanTerm::App(f, x) => {
@@ -107,20 +107,20 @@ fn formal_functor_laws() {
 #[test]
 fn formal_natural_transformation() {
     proptest!(|(base_term in arb_closed_term(), subst_term in arb_closed_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Create a term with a substitutable variable
         let lambda_term = Term::lambda(lift_debruijn(base_term.clone(), 0));
 
         if let (Ok(lean_lambda), Ok(lean_subst)) = (
-            bridge.translate_to_lean(&lambda_term),
-            bridge.translate_to_lean(&subst_term)
+            translator.to_lean(&lambda_term),
+            translator.to_lean(&subst_term)
         ) {
             // Perform substitution on TTT side
             let substituted_ttt = substitute_in_lambda(lambda_term.clone(), subst_term.clone());
 
             // Translate the substituted term
-            if let Ok(lean_substituted_ttt) = bridge.translate_to_lean(&substituted_ttt) {
+            if let Ok(lean_substituted_ttt) = translator.to_lean(&substituted_ttt) {
                 // Perform substitution on Lean side
                 let lean_substituted_lean = substitute_in_lean_lambda(lean_lambda, lean_subst);
 
@@ -141,11 +141,11 @@ fn formal_natural_transformation() {
 #[test]
 fn formal_type_preservation() {
     proptest!(|(term in arb_well_typed_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // This test requires implementing a type checker for TTT terms
         // For now, we verify that well-formed terms translate to well-formed Lean terms
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             prop_assert!(is_lean_term_well_formed(&lean_term));
 
             // Additional type checking would require:
@@ -165,7 +165,7 @@ fn formal_type_preservation() {
 #[test]
 fn formal_definitional_equality() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Test β-equivalent terms
         let lambda_app = Term::app(
@@ -175,8 +175,8 @@ fn formal_definitional_equality() {
         // This should be β-equivalent to just `term`
 
         if let (Ok(lean_original), Ok(lean_lambda_app)) = (
-            bridge.translate_to_lean(&term),
-            bridge.translate_to_lean(&lambda_app)
+            translator.to_lean(&term),
+            translator.to_lean(&lambda_app)
         ) {
             // In a full implementation, we would check definitional equality
             // For now, we verify structural properties are preserved
@@ -192,8 +192,8 @@ fn formal_definitional_equality() {
         );
 
         if let (Ok(lean_original), Ok(lean_eta)) = (
-            bridge.translate_to_lean(&term),
-            bridge.translate_to_lean(&eta_expanded)
+            translator.to_lean(&term),
+            translator.to_lean(&eta_expanded)
         ) {
             // η-equivalence checking would go here
             prop_assert!(true);
@@ -209,14 +209,14 @@ fn formal_definitional_equality() {
 #[test]
 fn formal_universe_consistency() {
     proptest!(|(i in 0u32..20, j in 0u32..20)| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         let type_i = Term::universe(i);
         let type_j = Term::universe(j);
 
         if let (Ok(LeanTerm::Sort(level_i)), Ok(LeanTerm::Sort(level_j))) = (
-            bridge.translate_to_lean(&type_i),
-            bridge.translate_to_lean(&type_j)
+            translator.to_lean(&type_i),
+            translator.to_lean(&type_j)
         ) {
             // Verify level ordering is preserved
             match (level_i.to_nat(), level_j.to_nat()) {
@@ -248,9 +248,9 @@ fn formal_universe_consistency() {
 #[test]
 fn formal_binding_structure() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             // Count binding levels in original term
             let ttt_binding_depth = count_binding_depth(&term);
             let lean_binding_depth = count_lean_binding_depth(&lean_term);
@@ -275,9 +275,9 @@ fn formal_binding_structure() {
 #[test]
 fn formal_computational_adequacy() {
     proptest!(|(term in arb_normalizable_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             // This would require implementing normalization for both TTT and Lean terms
             // For now, we verify that terms that are in normal form remain recognizable
             if is_ttt_normal_form(&term) {
@@ -300,11 +300,11 @@ fn formal_computational_adequacy() {
 #[test]
 fn formal_confluence_preservation() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // This is a complex property requiring full normalization
         // For now, we test that deterministic reductions are preserved
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             // Test basic deterministic reduction steps
             if can_beta_reduce(&term) {
                 prop_assert!(can_lean_beta_reduce(&lean_term));
@@ -325,11 +325,11 @@ fn formal_confluence_preservation() {
 #[test]
 fn formal_injectivity() {
     proptest!(|(t1 in arb_term(), t2 in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         if let (Ok(lean_t1), Ok(lean_t2)) = (
-            bridge.translate_to_lean(&t1),
-            bridge.translate_to_lean(&t2)
+            translator.to_lean(&t1),
+            translator.to_lean(&t2)
         ) {
             if lean_t1 == lean_t2 {
                 // If translations are equal, original terms should be α-equivalent

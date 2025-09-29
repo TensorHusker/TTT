@@ -3,8 +3,8 @@
 //! This module handles the core reduction operations for
 //! function application and closure evaluation.
 
-use crate::core::{Value, Closure, Neutral};
-use super::{EvalError, EvalResult};
+use crate::core::{Term, Value, Closure, Neutral, Environment, Level};
+use super::{EvalError, EvalResult, normalize};
 
 /// Apply a value to another value (function application)
 ///

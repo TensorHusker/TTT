@@ -6,7 +6,6 @@
 use ttt::core::{Term, Level};
 use ttt::lean::{LeanTerm, LeanLevel, LeanName, TranslationContext};
 use proptest::prelude::*;
-use quickcheck::{Arbitrary, Gen};
 use std::collections::HashMap;
 
 /// Maximum depth for generated terms to avoid infinite recursion
@@ -28,7 +27,7 @@ pub fn arb_term_with_depth(max_depth: usize) -> impl Strategy<Value = Term> {
         any::<usize>().prop_map(|id| Term::meta(id % MAX_META_ID)),
     ];
 
-    leaf.prop_recursive(max_depth, 256, 10, |inner| {
+    leaf.prop_recursive(max_depth as u32, 256, 10, |inner| {
         prop_oneof![
             // Lambda abstraction
             inner.clone().prop_map(Term::lambda),
@@ -56,7 +55,7 @@ pub fn arb_closed_term_with_depth(max_depth: usize) -> impl Strategy<Value = Ter
         any::<usize>().prop_map(|id| Term::meta(id % MAX_META_ID)),
     ];
 
-    leaf.prop_recursive(max_depth, 256, 10, |inner| {
+    leaf.prop_recursive(max_depth as u32, 256, 10, |inner| {
         prop_oneof![
             // Lambda with bound variable usage
             inner.clone().prop_map(|body| {
@@ -116,7 +115,7 @@ pub fn arb_lean_term_with_depth(max_depth: usize) -> impl Strategy<Value = LeanT
         arb_lean_name().prop_map(LeanTerm::Const),
     ];
 
-    leaf.prop_recursive(max_depth, 256, 10, |inner| {
+    leaf.prop_recursive(max_depth as u32, 256, 10, |inner| {
         prop_oneof![
             // Lambda
             (arb_lean_name(), inner.clone(), inner.clone())
@@ -235,7 +234,7 @@ pub fn arb_nested_pi_type() -> impl Strategy<Value = Term> {
     (1..8usize).prop_map(|n| {
         (0..n).fold(
             Term::universe(0), // Final codomain
-            |acc, i| Term::pi(Term::universe(0), acc)
+            |acc, _| Term::pi(Term::universe(0), acc)
         )
     })
 }
@@ -260,111 +259,6 @@ pub fn arb_nested_lambda() -> impl Strategy<Value = Term> {
     })
 }
 
-/// QuickCheck implementation for Term
-impl Arbitrary for Term {
-    fn arbitrary(g: &mut Gen) -> Self {
-        let depth = usize::arbitrary(g) % MAX_DEPTH;
-        generate_term_with_depth(g, depth)
-    }
-}
-
-fn generate_term_with_depth(g: &mut Gen, depth: usize) -> Term {
-    if depth == 0 {
-        match u8::arbitrary(g) % 3 {
-            0 => Term::var(usize::arbitrary(g) % MAX_VAR_INDEX),
-            1 => Term::universe(u32::arbitrary(g) % MAX_UNIVERSE_LEVEL),
-            _ => Term::meta(usize::arbitrary(g) % MAX_META_ID),
-        }
-    } else {
-        match u8::arbitrary(g) % 5 {
-            0 => generate_term_with_depth(g, depth - 1),
-            1 => Term::lambda(generate_term_with_depth(g, depth - 1)),
-            2 => Term::pi(
-                generate_term_with_depth(g, depth - 1),
-                generate_term_with_depth(g, depth - 1)
-            ),
-            3 => Term::app(
-                generate_term_with_depth(g, depth - 1),
-                generate_term_with_depth(g, depth - 1)
-            ),
-            _ => Term::let_in(
-                generate_term_with_depth(g, depth - 1),
-                generate_term_with_depth(g, depth - 1)
-            ),
-        }
-    }
-}
-
-/// QuickCheck implementation for LeanTerm
-impl Arbitrary for LeanTerm {
-    fn arbitrary(g: &mut Gen) -> Self {
-        let depth = usize::arbitrary(g) % MAX_DEPTH;
-        generate_lean_term_with_depth(g, depth)
-    }
-}
-
-fn generate_lean_term_with_depth(g: &mut Gen, depth: usize) -> LeanTerm {
-    if depth == 0 {
-        match u8::arbitrary(g) % 3 {
-            0 => LeanTerm::Var(LeanName::arbitrary(g)),
-            1 => LeanTerm::Sort(LeanLevel::arbitrary(g)),
-            _ => LeanTerm::Const(LeanName::arbitrary(g)),
-        }
-    } else {
-        match u8::arbitrary(g) % 5 {
-            0 => generate_lean_term_with_depth(g, depth - 1),
-            1 => LeanTerm::lambda(
-                LeanName::arbitrary(g),
-                generate_lean_term_with_depth(g, depth - 1),
-                generate_lean_term_with_depth(g, depth - 1)
-            ),
-            2 => LeanTerm::pi(
-                LeanName::arbitrary(g),
-                generate_lean_term_with_depth(g, depth - 1),
-                generate_lean_term_with_depth(g, depth - 1)
-            ),
-            3 => LeanTerm::app(
-                generate_lean_term_with_depth(g, depth - 1),
-                generate_lean_term_with_depth(g, depth - 1)
-            ),
-            _ => LeanTerm::let_in(
-                LeanName::arbitrary(g),
-                generate_lean_term_with_depth(g, depth - 1),
-                generate_lean_term_with_depth(g, depth - 1),
-                generate_lean_term_with_depth(g, depth - 1)
-            ),
-        }
-    }
-}
-
-impl Arbitrary for LeanName {
-    fn arbitrary(g: &mut Gen) -> Self {
-        let names = ["x", "y", "z", "f", "g", "h", "A", "B", "C", "P", "Q", "_"];
-        let name = names[usize::arbitrary(g) % names.len()];
-        LeanName::new(name)
-    }
-}
-
-impl Arbitrary for LeanLevel {
-    fn arbitrary(g: &mut Gen) -> Self {
-        let depth = usize::arbitrary(g) % 4;
-        generate_lean_level_with_depth(g, depth)
-    }
-}
-
-fn generate_lean_level_with_depth(g: &mut Gen, depth: usize) -> LeanLevel {
-    if depth == 0 {
-        match u8::arbitrary(g) % 2 {
-            0 => LeanLevel::zero(),
-            _ => LeanLevel::param(format!("l{}", u32::arbitrary(g) % 10)),
-        }
-    } else {
-        match u8::arbitrary(g) % 2 {
-            0 => LeanLevel::succ(generate_lean_level_with_depth(g, depth - 1)),
-            _ => LeanLevel::max(
-                generate_lean_level_with_depth(g, depth - 1),
-                generate_lean_level_with_depth(g, depth - 1)
-            ),
-        }
-    }
-}
+// Note: QuickCheck Arbitrary implementations are omitted to avoid orphan rule violations.
+// TTT types are defined in the main crate, and implementing external traits for them
+// in test modules would be invalid. PropTest generators above provide comprehensive coverage.

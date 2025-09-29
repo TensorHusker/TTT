@@ -26,7 +26,7 @@ pub fn convertible(term1: &crate::core::Term, term2: &crate::core::Term) -> bool
     }
 }
 
-use crate::core::Value;
+use crate::core::{Value, Level};
 
 /// Error types for evaluation
 #[derive(Debug, Clone, PartialEq)]

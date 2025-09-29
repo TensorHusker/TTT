@@ -481,9 +481,9 @@ mod tests {
 
         // Allocate some values
         let val1 = arena.allocate(42u32);
-        let val2 = arena.allocate(84u32);
-
         assert_eq!(*val1, 42);
+
+        let val2 = arena.allocate(84u32);
         assert_eq!(*val2, 84);
 
         let stats = arena.stats();

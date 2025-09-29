@@ -7,9 +7,9 @@
 #![cfg(feature = "lean-integration")]
 
 use ttt::core::{Term, Level};
-use ttt::lean::{LeanTerm, LeanLevel, LeanName, LeanBridge, TranslationContext};
+use ttt::lean::{LeanTerm, LeanLevel, LeanName, LeanTranslator};
 use proptest::prelude::*;
-use quickcheck::{quickcheck, TestResult};
+// Removed quickcheck import - using PropTest only
 use std::collections::HashSet;
 use pretty_assertions::assert_eq;
 
@@ -21,11 +21,11 @@ use crate::generators::*;
 #[test]
 fn prop_translation_roundtrip() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        match bridge.translate_to_lean(&term) {
+        match translator.to_lean(&term) {
             Ok(lean_term) => {
-                match bridge.translate_from_lean(&lean_term) {
+                match translator.from_lean(&lean_term) {
                     Ok(recovered_term) => {
                         prop_assert_eq!(term, recovered_term);
                     },
@@ -53,9 +53,9 @@ fn prop_translation_roundtrip() {
 #[test]
 fn prop_structural_preservation() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             match (&term, &lean_term) {
                 (Term::Var(_), LeanTerm::Var(_)) => prop_assert!(true),
                 (Term::Universe(_), LeanTerm::Sort(_)) => prop_assert!(true),
@@ -78,9 +78,9 @@ fn prop_structural_preservation() {
 #[test]
 fn prop_free_vars_preserved() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             let ttt_free_count = count_free_vars(&term);
             let lean_free_count = lean_term.free_vars().len();
 
@@ -101,16 +101,16 @@ fn prop_free_vars_preserved() {
 #[test]
 fn prop_substitution_commutes() {
     proptest!(|(base_term in arb_closed_term(), subst_term in arb_closed_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Create a term with a free variable to substitute into
         let term_with_var = add_lambda_binding(base_term.clone());
 
         if let (Ok(lean_base), Ok(lean_subst)) = (
-            bridge.translate_to_lean(&base_term),
-            bridge.translate_to_lean(&subst_term)
+            translator.to_lean(&base_term),
+            translator.to_lean(&subst_term)
         ) {
-            if let Ok(lean_with_var) = bridge.translate_to_lean(&term_with_var) {
+            if let Ok(lean_with_var) = translator.to_lean(&term_with_var) {
                 // Test that substitution behavior is preserved
                 // This is a simplified test - full implementation would need
                 // proper substitution operations on both sides
@@ -126,13 +126,13 @@ fn prop_substitution_commutes() {
 #[test]
 fn prop_universe_levels_preserved() {
     proptest!(|(level in 0u32..100)| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
         let universe = Term::universe(level);
 
-        if let Ok(LeanTerm::Sort(lean_level)) = bridge.translate_to_lean(&universe) {
+        if let Ok(LeanTerm::Sort(lean_level)) = translator.to_lean(&universe) {
             prop_assert_eq!(lean_level.to_nat(), Some(level));
 
-            if let Ok(recovered) = bridge.translate_from_lean(&LeanTerm::Sort(lean_level)) {
+            if let Ok(recovered) = translator.from_lean(&LeanTerm::Sort(lean_level)) {
                 prop_assert_eq!(universe, recovered);
             }
         }
@@ -146,14 +146,14 @@ fn prop_universe_levels_preserved() {
 #[test]
 fn prop_alpha_equivalence_respected() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // Generate α-equivalent term (placeholder - would need actual α-renaming)
         let alpha_equiv = term.clone(); // Simplified for now
 
         if let (Ok(lean1), Ok(lean2)) = (
-            bridge.translate_to_lean(&term),
-            bridge.translate_to_lean(&alpha_equiv)
+            translator.to_lean(&term),
+            translator.to_lean(&alpha_equiv)
         ) {
             // In a full implementation, we'd check structural equivalence
             // modulo variable naming
@@ -168,13 +168,13 @@ fn prop_alpha_equivalence_respected() {
 #[test]
 fn prop_application_compositional() {
     proptest!(|(func in arb_term(), arg in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
         let app = Term::app(func.clone(), arg.clone());
 
         if let (Ok(lean_func), Ok(lean_arg), Ok(lean_app)) = (
-            bridge.translate_to_lean(&func),
-            bridge.translate_to_lean(&arg),
-            bridge.translate_to_lean(&app)
+            translator.to_lean(&func),
+            translator.to_lean(&arg),
+            translator.to_lean(&app)
         ) {
             match lean_app {
                 LeanTerm::App(translated_func, translated_arg) => {
@@ -193,10 +193,10 @@ fn prop_application_compositional() {
 #[test]
 fn prop_lambda_binding_preservation() {
     proptest!(|(body in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
         let lambda = Term::lambda(body.clone());
 
-        if let Ok(LeanTerm::Lambda(name, ty, lean_body)) = bridge.translate_to_lean(&lambda) {
+        if let Ok(LeanTerm::Lambda(name, ty, lean_body)) = translator.to_lean(&lambda) {
             // Check that the binding structure is preserved
             // The exact variable references are complex to verify due to
             // De Bruijn vs named variable conversion
@@ -214,11 +214,11 @@ fn prop_lambda_binding_preservation() {
 #[test]
 fn prop_translation_idempotent() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term1) = bridge.translate_to_lean(&term) {
-            if let Ok(recovered_ttt) = bridge.translate_from_lean(&lean_term1) {
-                if let Ok(lean_term2) = bridge.translate_to_lean(&recovered_ttt) {
+        if let Ok(lean_term1) = translator.to_lean(&term) {
+            if let Ok(recovered_ttt) = translator.from_lean(&lean_term1) {
+                if let Ok(lean_term2) = translator.to_lean(&recovered_ttt) {
                     prop_assert_eq!(lean_term1, lean_term2);
                 }
             }
@@ -232,9 +232,9 @@ fn prop_translation_idempotent() {
 #[test]
 fn prop_lean_terms_well_formed() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             prop_assert!(is_lean_term_well_formed(&lean_term));
         }
     });
@@ -244,10 +244,10 @@ fn prop_lean_terms_well_formed() {
 #[test]
 fn prop_translation_performance_bounded() {
     proptest!(|(term in arb_term_with_depth(6))| {  // Limit depth for performance
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         let start = std::time::Instant::now();
-        let _result = bridge.translate_to_lean(&term);
+        let _result = translator.to_lean(&term);
         let duration = start.elapsed();
 
         // Translation should complete within reasonable time
@@ -263,82 +263,21 @@ fn prop_translation_performance_bounded() {
 #[test]
 fn prop_cache_consistency() {
     proptest!(|(term in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // First translation (cache miss)
-        if let Ok(lean_term1) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term1) = translator.to_lean(&term) {
             // Second translation (should hit cache)
-            if let Ok(lean_term2) = bridge.translate_to_lean(&term) {
+            if let Ok(lean_term2) = translator.to_lean(&term) {
                 prop_assert_eq!(lean_term1, lean_term2);
             }
         }
     });
 }
 
-// QuickCheck versions of key properties for additional coverage
-
-quickcheck! {
-    /// QuickCheck version of roundtrip property
-    fn qc_translation_roundtrip(term: Term) -> TestResult {
-        let bridge = match LeanBridge::new() {
-            Ok(b) => b,
-            Err(_) => return TestResult::discard(),
-        };
-
-        match bridge.translate_to_lean(&term) {
-            Ok(lean_term) => {
-                match bridge.translate_from_lean(&lean_term) {
-                    Ok(recovered) => TestResult::from_bool(term == recovered),
-                    Err(_) => TestResult::discard(),
-                }
-            },
-            Err(_) => TestResult::discard(),
-        }
-    }
-
-    /// QuickCheck version of structural preservation
-    fn qc_structural_preservation(term: Term) -> TestResult {
-        let bridge = match LeanBridge::new() {
-            Ok(b) => b,
-            Err(_) => return TestResult::discard(),
-        };
-
-        match bridge.translate_to_lean(&term) {
-            Ok(lean_term) => {
-                let preserved = match (&term, &lean_term) {
-                    (Term::Var(_), LeanTerm::Var(_)) => true,
-                    (Term::Universe(_), LeanTerm::Sort(_)) => true,
-                    (Term::Pi(_, _), LeanTerm::Pi(_, _, _)) => true,
-                    (Term::Lambda(_), LeanTerm::Lambda(_, _, _)) => true,
-                    (Term::App(_, _), LeanTerm::App(_, _)) => true,
-                    (Term::Let(_, _), LeanTerm::Let(_, _, _, _)) => true,
-                    (Term::Meta(_), LeanTerm::Const(_)) => true,
-                    _ => false,
-                };
-                TestResult::from_bool(preserved)
-            },
-            Err(_) => TestResult::discard(),
-        }
-    }
-
-    /// QuickCheck version of universe level preservation
-    fn qc_universe_levels(level: u32) -> TestResult {
-        if level > 1000 { return TestResult::discard(); } // Reasonable bound
-
-        let bridge = match LeanBridge::new() {
-            Ok(b) => b,
-            Err(_) => return TestResult::discard(),
-        };
-
-        let universe = Term::universe(level);
-        match bridge.translate_to_lean(&universe) {
-            Ok(LeanTerm::Sort(lean_level)) => {
-                TestResult::from_bool(lean_level.to_nat() == Some(level))
-            },
-            _ => TestResult::failed(),
-        }
-    }
-}
+// Note: QuickCheck tests are omitted since Term doesn't implement quickcheck::Arbitrary
+// and implementing it externally would violate the orphan rule. PropTest provides
+// sufficient coverage for property-based testing.
 
 /// Helper function to count free variables in a TTT term
 fn count_free_vars(term: &Term) -> usize {
@@ -463,14 +402,14 @@ fn is_lean_level_well_formed(level: &LeanLevel) -> bool {
 #[test]
 fn prop_definitional_equality_preservation() {
     proptest!(|(term1 in arb_term(), term2 in arb_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // This would require implementing normalization/conversion checking
         // For now, we test that identical terms remain identical
         if term1 == term2 {
             if let (Ok(lean1), Ok(lean2)) = (
-                bridge.translate_to_lean(&term1),
-                bridge.translate_to_lean(&term2)
+                translator.to_lean(&term1),
+                translator.to_lean(&term2)
             ) {
                 prop_assert_eq!(lean1, lean2);
             }
@@ -485,12 +424,12 @@ fn prop_definitional_equality_preservation() {
 #[test]
 fn prop_type_preservation() {
     proptest!(|(term in arb_closed_term())| {
-        let bridge = LeanBridge::new().unwrap();
+        let translator = LeanTranslator::new();
 
         // This would require implementing type inference/checking
         // which is beyond scope for this test suite
         // For now, verify that translation succeeds for closed terms
-        if let Ok(lean_term) = bridge.translate_to_lean(&term) {
+        if let Ok(lean_term) = translator.to_lean(&term) {
             prop_assert!(is_lean_term_well_formed(&lean_term));
         }
     });

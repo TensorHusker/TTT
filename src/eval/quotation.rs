@@ -3,7 +3,7 @@
 //! This module implements the quotation algorithm that converts
 //! semantic values back to syntactic terms in normal form.
 
-use crate::core::{Term, Value, Neutral};
+use crate::core::{Term, Level, Value, Neutral};
 
 /// Quote a value back to a normal term
 ///

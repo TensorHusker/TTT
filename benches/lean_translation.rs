@@ -8,7 +8,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
 use ttt::core::{Term, Level};
-use ttt::lean::{LeanBridge, LeanTerm};
+use ttt::lean::{LeanTranslator, LeanTerm};
 use std::time::Duration;
 
 /// Benchmark suite entry point
@@ -26,55 +26,55 @@ criterion_main!(benches);
 
 /// Benchmark TTT → Lean translation speed for various term types
 fn bench_translation_to_lean(c: &mut Criterion) {
-    let bridge = LeanBridge::new().expect("Failed to create bridge");
+    let translator = LeanTranslator::new();
 
     let mut group = c.benchmark_group("ttt_to_lean_translation");
 
     // Simple terms
     group.bench_function("variable", |b| {
         let term = Term::var(0);
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("universe", |b| {
         let term = Term::universe(5);
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("simple_lambda", |b| {
         let term = Term::lambda(Term::var(0));
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("simple_pi", |b| {
         let term = Term::pi(Term::type_0(), Term::var(0));
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("simple_app", |b| {
         let term = Term::app(Term::var(1), Term::var(0));
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("let_binding", |b| {
         let term = Term::let_in(Term::var(1), Term::var(0));
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     // Complex terms
     group.bench_function("church_numeral_5", |b| {
         let term = create_church_numeral(5);
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("nested_lambda_10", |b| {
         let term = create_nested_lambda(10);
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.bench_function("complex_pi_type", |b| {
         let term = create_complex_pi_type();
-        b.iter(|| bridge.translate_to_lean(black_box(&term)))
+        b.iter(|| translator.to_lean(black_box(&term)))
     });
 
     group.finish();
@@ -82,35 +82,35 @@ fn bench_translation_to_lean(c: &mut Criterion) {
 
 /// Benchmark Lean → TTT translation speed
 fn bench_translation_from_lean(c: &mut Criterion) {
-    let bridge = LeanBridge::new().expect("Failed to create bridge");
+    let translator = LeanTranslator::new();
 
     let mut group = c.benchmark_group("lean_to_ttt_translation");
 
     // Prepare pre-translated Lean terms
     let simple_terms = vec![
-        ("variable", bridge.translate_to_lean(&Term::var(0)).unwrap()),
-        ("universe", bridge.translate_to_lean(&Term::universe(3)).unwrap()),
-        ("lambda", bridge.translate_to_lean(&Term::lambda(Term::var(0))).unwrap()),
-        ("pi", bridge.translate_to_lean(&Term::pi(Term::type_0(), Term::var(0))).unwrap()),
-        ("app", bridge.translate_to_lean(&Term::app(Term::var(1), Term::var(0))).unwrap()),
+        ("variable", translator.to_lean(&Term::var(0)).unwrap()),
+        ("universe", translator.to_lean(&Term::universe(3)).unwrap()),
+        ("lambda", translator.to_lean(&Term::lambda(Term::var(0))).unwrap()),
+        ("pi", translator.to_lean(&Term::pi(Term::type_0(), Term::var(0))).unwrap()),
+        ("app", translator.to_lean(&Term::app(Term::var(1), Term::var(0))).unwrap()),
     ];
 
     for (name, lean_term) in simple_terms {
         group.bench_function(name, |b| {
-            b.iter(|| bridge.translate_from_lean(black_box(&lean_term)))
+            b.iter(|| translator.from_lean(black_box(&lean_term)))
         });
     }
 
     // Complex terms
     let complex_terms = vec![
-        ("church_3", bridge.translate_to_lean(&create_church_numeral(3)).unwrap()),
-        ("nested_lambda_8", bridge.translate_to_lean(&create_nested_lambda(8)).unwrap()),
-        ("complex_pi", bridge.translate_to_lean(&create_complex_pi_type()).unwrap()),
+        ("church_3", translator.to_lean(&create_church_numeral(3)).unwrap()),
+        ("nested_lambda_8", translator.to_lean(&create_nested_lambda(8)).unwrap()),
+        ("complex_pi", translator.to_lean(&create_complex_pi_type()).unwrap()),
     ];
 
     for (name, lean_term) in complex_terms {
         group.bench_function(name, |b| {
-            b.iter(|| bridge.translate_from_lean(black_box(&lean_term)))
+            b.iter(|| translator.from_lean(black_box(&lean_term)))
         });
     }
 
@@ -119,7 +119,7 @@ fn bench_translation_from_lean(c: &mut Criterion) {
 
 /// Benchmark roundtrip translation performance (TTT → Lean → TTT)
 fn bench_roundtrip_translation(c: &mut Criterion) {
-    let bridge = LeanBridge::new().expect("Failed to create bridge");
+    let translator = LeanTranslator::new();
 
     let mut group = c.benchmark_group("roundtrip_translation");
 
@@ -133,8 +133,8 @@ fn bench_roundtrip_translation(c: &mut Criterion) {
     for (name, term) in test_terms {
         group.bench_function(name, |b| {
             b.iter(|| {
-                let lean_term = bridge.translate_to_lean(black_box(&term)).unwrap();
-                bridge.translate_from_lean(black_box(&lean_term)).unwrap()
+                let lean_term = translator.to_lean(black_box(&term)).unwrap();
+                translator.from_lean(black_box(&lean_term)).unwrap()
             })
         });
     }
@@ -159,11 +159,11 @@ fn bench_cache_performance(c: &mut Criterion) {
 
             for _ in 0..iters {
                 // Fresh bridge for each iteration to ensure cold cache
-                let bridge = LeanBridge::new().expect("Failed to create bridge");
+                let translator = LeanTranslator::new();
 
                 let start = std::time::Instant::now();
                 for term in &terms {
-                    let _ = bridge.translate_to_lean(black_box(term));
+                    let _ = translator.to_lean(black_box(term));
                 }
                 total_duration += start.elapsed();
             }
@@ -174,34 +174,34 @@ fn bench_cache_performance(c: &mut Criterion) {
 
     // Warm cache (repeated access)
     group.bench_function("warm_cache", |b| {
-        let bridge = LeanBridge::new().expect("Failed to create bridge");
+        let translator = LeanTranslator::new();
 
         // Pre-warm the cache
         for term in &terms {
-            let _ = bridge.translate_to_lean(term);
+            let _ = translator.to_lean(term);
         }
 
         b.iter(|| {
             for term in &terms {
-                let _ = bridge.translate_to_lean(black_box(term));
+                let _ = translator.to_lean(black_box(term));
             }
         })
     });
 
     // Mixed workload (some cached, some not)
     group.bench_function("mixed_workload", |b| {
-        let bridge = LeanBridge::new().expect("Failed to create bridge");
+        let translator = LeanTranslator::new();
 
         // Cache half the terms
         for (i, term) in terms.iter().enumerate() {
             if i % 2 == 0 {
-                let _ = bridge.translate_to_lean(term);
+                let _ = translator.to_lean(term);
             }
         }
 
         b.iter(|| {
             for term in &terms {
-                let _ = bridge.translate_to_lean(black_box(term));
+                let _ = translator.to_lean(black_box(term));
             }
         })
     });
@@ -211,7 +211,7 @@ fn bench_cache_performance(c: &mut Criterion) {
 
 /// Benchmark scaling behavior with term complexity
 fn bench_term_complexity_scaling(c: &mut Criterion) {
-    let bridge = LeanBridge::new().expect("Failed to create bridge");
+    let translator = LeanTranslator::new();
 
     let mut group = c.benchmark_group("complexity_scaling");
     group.sample_size(50); // Reduce sample size for expensive benchmarks
@@ -224,7 +224,7 @@ fn bench_term_complexity_scaling(c: &mut Criterion) {
             BenchmarkId::new("nested_lambda", depth),
             depth,
             |b, _| {
-                b.iter(|| bridge.translate_to_lean(black_box(&term)))
+                b.iter(|| translator.to_lean(black_box(&term)))
             }
         );
     }
@@ -237,7 +237,7 @@ fn bench_term_complexity_scaling(c: &mut Criterion) {
             BenchmarkId::new("church_numeral", n),
             n,
             |b, _| {
-                b.iter(|| bridge.translate_to_lean(black_box(&term)))
+                b.iter(|| translator.to_lean(black_box(&term)))
             }
         );
     }
@@ -250,7 +250,7 @@ fn bench_term_complexity_scaling(c: &mut Criterion) {
             BenchmarkId::new("application_chain", length),
             length,
             |b, _| {
-                b.iter(|| bridge.translate_to_lean(black_box(&term)))
+                b.iter(|| translator.to_lean(black_box(&term)))
             }
         );
     }
@@ -274,11 +274,11 @@ fn bench_concurrent_translation(c: &mut Criterion) {
 
     // Sequential processing
     group.bench_function("sequential", |b| {
-        let bridge = LeanBridge::new().expect("Failed to create bridge");
+        let translator = LeanTranslator::new();
 
         b.iter(|| {
             for term in &terms {
-                let _ = bridge.translate_to_lean(black_box(term));
+                let _ = translator.to_lean(black_box(term));
             }
         })
     });
@@ -293,7 +293,7 @@ fn bench_concurrent_translation(c: &mut Criterion) {
 
         b.iter(|| {
             terms.par_iter().for_each(|term| {
-                let _ = bridge.translate_to_lean(black_box(term));
+                let _ = translator.to_lean(black_box(term));
             });
         })
     });
@@ -321,11 +321,11 @@ fn bench_memory_usage(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         // Fresh bridge to avoid cache effects on memory
-                        let bridge = LeanBridge::new().expect("Failed to create bridge");
+                        let translator = LeanTranslator::new();
 
                         let start = std::time::Instant::now();
                         for term in &terms {
-                            let _ = bridge.translate_to_lean(black_box(term));
+                            let _ = translator.to_lean(black_box(term));
                         }
                         total_duration += start.elapsed();
 
@@ -344,7 +344,7 @@ fn bench_memory_usage(c: &mut Criterion) {
 
 /// Benchmark translation of very large terms
 fn bench_large_term_translation(c: &mut Criterion) {
-    let bridge = LeanBridge::new().expect("Failed to create bridge");
+    let translator = LeanTranslator::new();
 
     let mut group = c.benchmark_group("large_terms");
     group.sample_size(10);
@@ -360,7 +360,7 @@ fn bench_large_term_translation(c: &mut Criterion) {
 
     for (name, term) in large_terms {
         group.bench_function(name, |b| {
-            b.iter(|| bridge.translate_to_lean(black_box(&term)))
+            b.iter(|| translator.to_lean(black_box(&term)))
         });
     }
 
