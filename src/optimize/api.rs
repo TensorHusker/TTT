@@ -3,6 +3,7 @@
 //! This module provides a simple, safe interface to the TTT optimization system,
 //! allowing users to easily enable and configure performance optimizations.
 
+use std::sync::Arc;
 use crate::core::Term;
 use crate::eval::normalize as standard_normalize;
 use super::{OptimizationConfig, PerformanceMetrics};
@@ -133,7 +134,7 @@ impl OptimizedTTT {
         let optimized_term = if self.config.enable_hash_consing {
             super::hash_cons_deep(term.clone())
         } else {
-            std::rc::Rc::new(term.clone())
+            Arc::new(term.clone())
         };
 
         // Use standard normalization on optimized term
@@ -157,7 +158,7 @@ impl OptimizedTTT {
 }
 
 /// Convenience functions for one-off operations
-
+///
 /// Normalize a term with default optimizations
 pub fn normalize_optimized(term: &Term) -> Result<Term, Box<dyn std::error::Error>> {
     let mut ttt = OptimizedTTT::with_defaults();

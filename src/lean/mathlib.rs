@@ -14,8 +14,7 @@ use serde::{Serialize, Deserialize};
 use parking_lot::RwLock;
 use thiserror::Error;
 
-use crate::lean::{LeanTerm, LeanName, Result as LeanResult, LeanError};
-use crate::core::Term;
+use crate::lean::{LeanTerm, LeanName, LeanError};
 
 /// Error types specific to mathlib operations
 #[derive(Error, Debug)]
@@ -712,7 +711,7 @@ pub enum SearchQuery {
 }
 
 /// Database statistics
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DatabaseStats {
     pub total_theorems: usize,
     pub category_distribution: HashMap<TheoremCategory, usize>,

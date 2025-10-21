@@ -36,8 +36,8 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use dashmap::DashMap;
 
-use crate::core::{Term, Level};
-use crate::core::name::{Name, NameContext};
+use crate::core::Term;
+use crate::core::name::Name;
 use crate::lean::types::{LeanTerm, LeanLevel, LeanName};
 use crate::lean::context::TranslationContext;
 use crate::lean::error::{Result, LeanError};

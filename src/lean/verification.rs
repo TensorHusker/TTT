@@ -4,22 +4,20 @@
 //! with Lean's kernel and utilizing mathlib4 theorems. It supports both
 //! synchronous and asynchronous verification with sophisticated caching.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, oneshot, Semaphore};
 use tokio::time::timeout;
 use thiserror::Error;
 use serde::{Serialize, Deserialize};
 
-use crate::lean::{LeanTerm, LeanName, LeanError, Result as LeanResult};
-use crate::lean::mathlib::{TheoremDatabase, MathlibTheorem, SearchQuery};
+use crate::lean::{LeanTerm, LeanName, LeanError};
+use crate::lean::mathlib::{TheoremDatabase, MathlibTheorem};
 use crate::lean::server::LeanServer;
 use crate::lean::cache::VerificationCache;
-use crate::core::Term;
 
 /// Verification-specific errors
 #[derive(Error, Debug)]
@@ -119,7 +117,7 @@ impl ProofResult {
 }
 
 /// Verification strategies for different proof approaches
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VerificationStrategy {
     /// Direct kernel verification
     Kernel,
@@ -448,12 +446,13 @@ impl LeanVerifier {
     }
 
     /// Verify using a specific strategy
-    async fn verify_with_strategy(
-        &self,
+    fn verify_with_strategy<'a>(
+        &'a self,
         goal: LeanTerm,
         proof_hint: Option<LeanTerm>,
         strategy: VerificationStrategy,
-    ) -> VerificationResult<ProofResult> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = VerificationResult<ProofResult>> + Send + 'a>> {
+        Box::pin(async move {
         let start = Instant::now();
 
         // Check cache first
@@ -490,6 +489,7 @@ impl LeanVerifier {
         }
 
         result
+        })
     }
 
     /// Verify using Lean's kernel directly

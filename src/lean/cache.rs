@@ -556,18 +556,19 @@ where
 }
 
 /// Multi-tiered cache combining memory and persistent storage
-pub struct TieredCache<T> {
+#[derive(Clone)]
+pub struct TieredCache<T: Clone> {
     /// L1 cache (memory)
-    memory_cache: MemoryCache<T>,
+    memory_cache: Arc<MemoryCache<T>>,
 
     /// L2 cache (persistent)
-    persistent_cache: PersistentCache<T>,
+    persistent_cache: Arc<PersistentCache<T>>,
 
     /// Configuration
     config: TieredCacheConfig,
 
     /// Combined statistics
-    stats: CacheStats,
+    stats: Arc<CacheStats>,
 }
 
 #[derive(Debug, Clone)]
@@ -602,14 +603,14 @@ where
 {
     /// Create a new tiered cache
     pub async fn new(cache_dir: PathBuf, config: TieredCacheConfig) -> CacheResult<Self> {
-        let memory_cache = MemoryCache::new(config.memory_config.clone());
-        let persistent_cache = PersistentCache::new(cache_dir, config.persistent_config.clone()).await?;
+        let memory_cache = Arc::new(MemoryCache::new(config.memory_config.clone()));
+        let persistent_cache = Arc::new(PersistentCache::new(cache_dir, config.persistent_config.clone()).await?);
 
         Ok(Self {
             memory_cache,
             persistent_cache,
             config,
-            stats: CacheStats::new(),
+            stats: Arc::new(CacheStats::new()),
         })
     }
 
@@ -673,6 +674,9 @@ where
 
     /// Get combined statistics
     pub fn stats(&self) -> CacheStatsSnapshot {
+        let memory_stats = self.memory_cache.stats();
+        let persistent_stats = self.persistent_cache.stats();
+
         CacheStatsSnapshot {
             total_accesses: self.stats.accesses.load(std::sync::atomic::Ordering::Relaxed),
             total_hits: self.stats.hits.load(std::sync::atomic::Ordering::Relaxed),
@@ -680,8 +684,8 @@ where
             total_insertions: self.stats.insertions.load(std::sync::atomic::Ordering::Relaxed),
             total_evictions: self.stats.evictions.load(std::sync::atomic::Ordering::Relaxed),
             hit_rate: self.stats.hit_rate(),
-            memory_stats: self.memory_cache.stats().snapshot(),
-            persistent_stats: self.persistent_cache.stats().snapshot(),
+            memory_usage_bytes: memory_stats.hits.load(std::sync::atomic::Ordering::Relaxed), // Approximate
+            persistent_cache_size: persistent_stats.hits.load(std::sync::atomic::Ordering::Relaxed) as usize, // Approximate
         }
     }
 }
@@ -753,8 +757,8 @@ impl CacheStats {
             total_insertions: self.insertions.load(std::sync::atomic::Ordering::Relaxed),
             total_evictions: self.evictions.load(std::sync::atomic::Ordering::Relaxed),
             hit_rate: self.hit_rate(),
-            memory_stats: CacheStatsSnapshot::default(),
-            persistent_stats: CacheStatsSnapshot::default(),
+            memory_usage_bytes: 0,
+            persistent_cache_size: 0,
         }
     }
 }
@@ -767,8 +771,8 @@ pub struct CacheStatsSnapshot {
     pub total_insertions: u64,
     pub total_evictions: u64,
     pub hit_rate: f64,
-    pub memory_stats: CacheStatsSnapshot,
-    pub persistent_stats: CacheStatsSnapshot,
+    pub memory_usage_bytes: u64,
+    pub persistent_cache_size: usize,
 }
 
 /// Specialized cache for different data types

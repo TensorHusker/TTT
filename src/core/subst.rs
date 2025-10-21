@@ -4,7 +4,7 @@
 //! De Bruijn indices. The implementation handles variable shifting and
 //! capture-avoidance automatically, ensuring correctness of binding structure.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use crate::core::Term;
 
 /// Parallel substitution mapping De Bruijn indices to terms
@@ -16,7 +16,7 @@ use crate::core::Term;
 pub struct Substitution {
     /// Mapping from indices to replacement terms
     /// Index i maps to terms[i] if i < terms.len()
-    terms: Vec<Option<Rc<Term>>>,
+    terms: Vec<Option<Arc<Term>>>,
 }
 
 impl Substitution {
@@ -35,7 +35,7 @@ impl Substitution {
     /// Create a single substitution [x ↦ term]
     pub fn single(index: usize, term: Term) -> Self {
         let mut terms = vec![None; index + 1];
-        terms[index] = Some(Rc::new(term));
+        terms[index] = Some(Arc::new(term));
         Substitution { terms }
     }
 
@@ -45,7 +45,7 @@ impl Substitution {
         if index >= new_terms.len() {
             new_terms.resize(index + 1, None);
         }
-        new_terms[index] = Some(Rc::new(term));
+        new_terms[index] = Some(Arc::new(term));
         Substitution { terms: new_terms }
     }
 
@@ -64,7 +64,7 @@ impl Substitution {
     pub fn shift(&self, cutoff: usize, shift_amount: isize) -> Self {
         let new_terms = self.terms.iter().enumerate().map(|(i, opt_term)| {
             match opt_term {
-                Some(term) => Some(Rc::new(shift_term(term, cutoff, shift_amount))),
+                Some(term) => Some(Arc::new(shift_term(term, cutoff, shift_amount))),
                 None => None,
             }
         }).collect();
@@ -81,10 +81,10 @@ impl Substitution {
         for i in 0..max_len {
             let term = if let Some(replacement) = self.lookup(i) {
                 // Apply other substitution to our replacement
-                Some(Rc::new(apply_substitution(replacement, other)))
+                Some(Arc::new(apply_substitution(replacement, other)))
             } else if let Some(replacement) = other.lookup(i) {
                 // Use other's replacement directly
-                Some(Rc::new(replacement.clone()))
+                Some(Arc::new(replacement.clone()))
             } else {
                 // No replacement in either substitution
                 None
@@ -144,20 +144,20 @@ fn apply_substitution_aux(term: &Term, subst: &Substitution, depth: usize) -> Te
             // Under Pi binder, shift substitution
             let shifted_subst = subst.shift(0, 1);
             let new_codomain = apply_substitution_aux(codomain, &shifted_subst, depth + 1);
-            Term::Pi(Rc::new(new_domain), Rc::new(new_codomain))
+            Term::Pi(Arc::new(new_domain), Arc::new(new_codomain))
         },
 
         Term::Lambda(body) => {
             // Under lambda binder, shift substitution
             let shifted_subst = subst.shift(0, 1);
             let new_body = apply_substitution_aux(body, &shifted_subst, depth + 1);
-            Term::Lambda(Rc::new(new_body))
+            Term::Lambda(Arc::new(new_body))
         },
 
         Term::App(function, argument) => {
             let new_function = apply_substitution_aux(function, subst, depth);
             let new_argument = apply_substitution_aux(argument, subst, depth);
-            Term::App(Rc::new(new_function), Rc::new(new_argument))
+            Term::App(Arc::new(new_function), Arc::new(new_argument))
         },
 
         Term::Let(binding, body) => {
@@ -165,7 +165,7 @@ fn apply_substitution_aux(term: &Term, subst: &Substitution, depth: usize) -> Te
             // Under let binder, shift substitution
             let shifted_subst = subst.shift(0, 1);
             let new_body = apply_substitution_aux(body, &shifted_subst, depth + 1);
-            Term::Let(Rc::new(new_binding), Rc::new(new_body))
+            Term::Let(Arc::new(new_binding), Arc::new(new_body))
         },
 
         Term::Meta(id) => Term::Meta(*id),
@@ -202,24 +202,24 @@ pub fn shift_term(term: &Term, cutoff: usize, shift_amount: isize) -> Term {
         Term::Pi(domain, codomain) => {
             let new_domain = shift_term(domain, cutoff, shift_amount);
             let new_codomain = shift_term(codomain, cutoff + 1, shift_amount);
-            Term::Pi(Rc::new(new_domain), Rc::new(new_codomain))
+            Term::Pi(Arc::new(new_domain), Arc::new(new_codomain))
         },
 
         Term::Lambda(body) => {
             let new_body = shift_term(body, cutoff + 1, shift_amount);
-            Term::Lambda(Rc::new(new_body))
+            Term::Lambda(Arc::new(new_body))
         },
 
         Term::App(function, argument) => {
             let new_function = shift_term(function, cutoff, shift_amount);
             let new_argument = shift_term(argument, cutoff, shift_amount);
-            Term::App(Rc::new(new_function), Rc::new(new_argument))
+            Term::App(Arc::new(new_function), Arc::new(new_argument))
         },
 
         Term::Let(binding, body) => {
             let new_binding = shift_term(binding, cutoff, shift_amount);
             let new_body = shift_term(body, cutoff + 1, shift_amount);
-            Term::Let(Rc::new(new_binding), Rc::new(new_body))
+            Term::Let(Arc::new(new_binding), Arc::new(new_body))
         },
 
         Term::Meta(id) => Term::Meta(*id),

@@ -58,7 +58,7 @@ harness = false
 
 [features]
 default = ["lean-integration"]
-lean-integration = []
+lean-integration = ["tokio"]
 async-verification = ["tokio"]
 
 [profile.release]

@@ -4,7 +4,7 @@
 //! They enable efficient normalization and convertibility checking while
 //! maintaining the mathematical structure of dependent type theory.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::fmt;
 use crate::core::{Term, Level};
 
@@ -28,7 +28,7 @@ pub enum Value {
     ///
     /// Domain is already evaluated, codomain is a closure that
     /// will be evaluated when applied to an argument.
-    Pi(Rc<Value>, Closure),
+    Pi(Arc<Value>, Closure),
 
     /// Lambda function value
     ///
@@ -53,7 +53,7 @@ pub struct Closure {
     /// Environment mapping De Bruijn indices to values
     pub env: Environment,
     /// Term to be evaluated in the environment
-    pub term: Rc<Term>,
+    pub term: Arc<Term>,
 }
 
 /// Environment for variable lookup
@@ -64,7 +64,7 @@ pub struct Closure {
 pub struct Environment {
     /// Values for each De Bruijn level
     /// Index 0 corresponds to level 0 (outermost binding)
-    values: Vec<Rc<Value>>,
+    values: Vec<Arc<Value>>,
 }
 
 /// Neutral terms - variables with spines
@@ -77,7 +77,7 @@ pub struct Neutral {
     /// The head variable (De Bruijn level)
     pub head: usize,
     /// Spine of applications
-    pub spine: Vec<Rc<Value>>,
+    pub spine: Vec<Arc<Value>>,
 }
 
 impl Value {
@@ -96,7 +96,7 @@ impl Value {
     /// Create a Pi type value
     #[inline]
     pub fn pi(domain: Value, codomain: Closure) -> Self {
-        Value::Pi(Rc::new(domain), codomain)
+        Value::Pi(Arc::new(domain), codomain)
     }
 
     /// Create a lambda value
@@ -107,7 +107,7 @@ impl Value {
 
     /// Create a neutral value
     #[inline]
-    pub fn neutral(head: usize, spine: Vec<Rc<Value>>) -> Self {
+    pub fn neutral(head: usize, spine: Vec<Arc<Value>>) -> Self {
         Value::Neutral(Neutral { head, spine })
     }
 
@@ -169,7 +169,7 @@ impl Closure {
     pub fn new(env: Environment, term: Term) -> Self {
         Closure {
             env,
-            term: Rc::new(term),
+            term: Arc::new(term),
         }
     }
 
@@ -178,7 +178,7 @@ impl Closure {
     pub fn empty(term: Term) -> Self {
         Closure {
             env: Environment::default(),
-            term: Rc::new(term),
+            term: Arc::new(term),
         }
     }
 
@@ -218,7 +218,7 @@ impl Environment {
     /// current length of the environment.
     pub fn extend(&self, value: Value) -> Self {
         let mut new_values = self.values.clone();
-        new_values.push(Rc::new(value));
+        new_values.push(Arc::new(value));
         Environment { values: new_values }
     }
 
@@ -250,7 +250,7 @@ impl Environment {
 
     /// Get all values as a slice
     #[inline]
-    pub fn values(&self) -> &[Rc<Value>] {
+    pub fn values(&self) -> &[Arc<Value>] {
         &self.values
     }
 }
@@ -268,7 +268,7 @@ impl Neutral {
     /// Apply an argument to the neutral term
     pub fn apply(&self, arg: Value) -> Self {
         let mut new_spine = self.spine.clone();
-        new_spine.push(Rc::new(arg));
+        new_spine.push(Arc::new(arg));
         Neutral {
             head: self.head,
             spine: new_spine,

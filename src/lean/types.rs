@@ -1,14 +1,13 @@
 //! Lean type representations for TTT-Lean bridge
 
 use std::fmt;
-use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 /// Lean term representation
 ///
 /// This mirrors Lean's expression structure but simplified for
 /// our translation needs. Uses named variables instead of De Bruijn indices.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LeanTerm {
     /// Variable reference by name
     Var(LeanName),

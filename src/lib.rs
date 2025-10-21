@@ -8,6 +8,9 @@ pub mod eval;
 pub mod optimize;
 pub mod typeck;
 
+#[cfg(feature = "lean-integration")]
+pub mod lean;
+
 // Re-export main types and functions
 pub use core::{Term, Level, Value, Environment};
 pub use eval::{normalize, convertible, apply_value};

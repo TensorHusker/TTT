@@ -6,20 +6,21 @@
 
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::hash::{Hash, Hasher};
 
 use parking_lot::{Mutex, RwLock};
 use dashmap::DashMap;
 use lru::LruCache;
 use ahash::{AHasher, RandomState};
-use string_interner::{StringInterner, DefaultSymbol};
+use string_interner::{StringInterner, Symbol};
 use bumpalo::Bump;
 use smallvec::SmallVec;
+use rayon::prelude::*;
 
 use crate::core::{Term, Level};
-use super::{LeanTerm, LeanLevel, LeanName, Result, LeanError};
-use super::translation::TranslationContext;
+use super::{LeanTerm, LeanLevel, LeanName, Result};
+use super::context::TranslationContext;
 
 /// Fast content-addressable hash for terms
 #[inline]
@@ -115,7 +116,7 @@ pub struct OptimizedTranslator {
     l3_cache: Arc<PersistentCache>,
 
     /// String interner for memory optimization
-    string_interner: Arc<Mutex<StringInterner>>,
+    string_interner: Arc<Mutex<StringInterner<string_interner::DefaultBackend>>>,
 
     /// Arena allocator for temporary objects
     arena: Arc<Mutex<Bump>>,
@@ -132,11 +133,15 @@ impl OptimizedTranslator {
     /// Create a new optimized translator
     pub fn new() -> Self {
         // Pre-populate universe cache for levels 0-15
-        let mut universe_cache = [None; 16];
-        universe_cache[0] = Some(LeanLevel::Zero);
+        let mut universe_cache_vec = Vec::with_capacity(16);
+        universe_cache_vec.push(Some(LeanLevel::Zero));
         for i in 1..16 {
-            universe_cache[i] = Some(LeanLevel::Succ(Box::new(universe_cache[i-1].clone().unwrap())));
+            universe_cache_vec.push(Some(LeanLevel::Succ(Box::new(universe_cache_vec[i-1].clone().unwrap()))));
         }
+
+        // Convert Vec to array
+        let universe_cache: [Option<LeanLevel>; 16] = universe_cache_vec.try_into()
+            .expect("Vec should have exactly 16 elements");
 
         Self {
             l1_cache: Arc::new(Mutex::new(LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()))),
@@ -236,13 +241,13 @@ impl OptimizedTranslator {
     /// Core translation with algorithmic optimizations
     fn translate_with_optimization(&self, term: &Term) -> Result<LeanTerm> {
         match term {
-            Term::Sort(level) => {
+            Term::Universe(level) => {
                 // Fast path for common universe levels
-                if let Some(lean_level) = self.fast_universe_translation(*level as u32) {
+                if let Some(lean_level) = self.fast_universe_translation(level.value()) {
                     Ok(LeanTerm::Sort(lean_level))
                 } else {
                     // General case
-                    Ok(LeanTerm::Sort(self.translate_level(&Level::Literal(*level))?))
+                    Ok(LeanTerm::Sort(self.translate_level(level)?))
                 }
             },
 

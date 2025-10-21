@@ -3,6 +3,7 @@
 //! This module provides highly optimized operations for De Bruijn indices,
 //! including SIMD-accelerated shifting and efficient variable lookup patterns.
 
+use std::sync::Arc;
 use smallvec::{SmallVec, smallvec};
 use crate::core::{Term, subst::Substitution};
 use super::{record_metric, time_operation};
@@ -275,26 +276,26 @@ impl VectorizedSubstitution {
                 let new_domain = self.apply_vectorized_aux(domain, subst, depth);
                 let shifted_subst = subst.shift(0, 1);
                 let new_codomain = self.apply_vectorized_aux(codomain, &shifted_subst, depth + 1);
-                Term::Pi(std::rc::Rc::new(new_domain), std::rc::Rc::new(new_codomain))
+                Term::Pi(Arc::new(new_domain), Arc::new(new_codomain))
             },
 
             Term::Lambda(body) => {
                 let shifted_subst = subst.shift(0, 1);
                 let new_body = self.apply_vectorized_aux(body, &shifted_subst, depth + 1);
-                Term::Lambda(std::rc::Rc::new(new_body))
+                Term::Lambda(Arc::new(new_body))
             },
 
             Term::App(function, argument) => {
                 let new_function = self.apply_vectorized_aux(function, subst, depth);
                 let new_argument = self.apply_vectorized_aux(argument, subst, depth);
-                Term::App(std::rc::Rc::new(new_function), std::rc::Rc::new(new_argument))
+                Term::App(Arc::new(new_function), Arc::new(new_argument))
             },
 
             Term::Let(binding, body) => {
                 let new_binding = self.apply_vectorized_aux(binding, subst, depth);
                 let shifted_subst = subst.shift(0, 1);
                 let new_body = self.apply_vectorized_aux(body, &shifted_subst, depth + 1);
-                Term::Let(std::rc::Rc::new(new_binding), std::rc::Rc::new(new_body))
+                Term::Let(Arc::new(new_binding), Arc::new(new_body))
             },
 
             Term::Meta(id) => Term::Meta(*id),
@@ -320,24 +321,24 @@ impl VectorizedSubstitution {
             Term::Pi(domain, codomain) => {
                 let new_domain = self.shift_term_vectorized(domain, cutoff, shift_amount);
                 let new_codomain = self.shift_term_vectorized(codomain, cutoff + 1, shift_amount);
-                Term::Pi(std::rc::Rc::new(new_domain), std::rc::Rc::new(new_codomain))
+                Term::Pi(Arc::new(new_domain), Arc::new(new_codomain))
             },
 
             Term::Lambda(body) => {
                 let new_body = self.shift_term_vectorized(body, cutoff + 1, shift_amount);
-                Term::Lambda(std::rc::Rc::new(new_body))
+                Term::Lambda(Arc::new(new_body))
             },
 
             Term::App(function, argument) => {
                 let new_function = self.shift_term_vectorized(function, cutoff, shift_amount);
                 let new_argument = self.shift_term_vectorized(argument, cutoff, shift_amount);
-                Term::App(std::rc::Rc::new(new_function), std::rc::Rc::new(new_argument))
+                Term::App(Arc::new(new_function), Arc::new(new_argument))
             },
 
             Term::Let(binding, body) => {
                 let new_binding = self.shift_term_vectorized(binding, cutoff, shift_amount);
                 let new_body = self.shift_term_vectorized(body, cutoff + 1, shift_amount);
-                Term::Let(std::rc::Rc::new(new_binding), std::rc::Rc::new(new_body))
+                Term::Let(Arc::new(new_binding), Arc::new(new_body))
             },
 
             Term::Meta(id) => Term::Meta(*id),

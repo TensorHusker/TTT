@@ -4,15 +4,15 @@
 //! metavariable generation and inference context management.
 
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 use crate::core::{Term, Value};
 use super::{Context, CheckResult, ConstraintSolver};
 
-/// Global metavariable generator
-///
-/// Thread-local generator for creating fresh metavariables during type inference.
-/// Uses RefCell for interior mutability in a single-threaded context.
 thread_local! {
+    /// Global metavariable generator
+    ///
+    /// Thread-local generator for creating fresh metavariables during type inference.
+    /// Uses RefCell for interior mutability in a single-threaded context.
     static META_GENERATOR: RefCell<MetavarGenerator> = RefCell::new(MetavarGenerator::new());
 }
 
@@ -81,7 +81,7 @@ pub struct InferenceContext {
     /// Metavariables and their types
     metavar_types: Vec<Value>,
     /// Constraint solver
-    solver: Rc<RefCell<ConstraintSolver>>,
+    solver: Arc<RefCell<ConstraintSolver>>,
 }
 
 impl InferenceContext {
@@ -90,7 +90,7 @@ impl InferenceContext {
         InferenceContext {
             base_context,
             metavar_types: Vec::new(),
-            solver: Rc::new(RefCell::new(ConstraintSolver::new())),
+            solver: Arc::new(RefCell::new(ConstraintSolver::new())),
         }
     }
 
@@ -121,7 +121,7 @@ impl InferenceContext {
     }
 
     /// Get solver
-    pub fn solver(&self) -> Rc<RefCell<ConstraintSolver>> {
+    pub fn solver(&self) -> Arc<RefCell<ConstraintSolver>> {
         self.solver.clone()
     }
 

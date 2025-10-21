@@ -184,19 +184,19 @@ impl LeanBridge {
         };
         let cache_manager = Arc::new(
             CacheManager::new(cache_config).await
-                .map_err(|e| LeanError::Other(format!("Cache initialization failed: {}", e)))?
+                .map_err(|e| LeanError::Internal(format!("Cache initialization failed: {}", e)))?
         );
 
         // Initialize Lean server
         let server = Arc::new(
             LeanServer::new(config.server_config.clone()).await
-                .map_err(|e| LeanError::Other(format!("Server initialization failed: {}", e)))?
+                .map_err(|e| LeanError::Internal(format!("Server initialization failed: {}", e)))?
         );
 
         // Load mathlib theorem database
         let theorem_db = Arc::new(
             TheoremDatabase::load_from_mathlib(config.mathlib_path.clone()).await
-                .map_err(|e| LeanError::Other(format!("Mathlib loading failed: {}", e)))?
+                .map_err(|e| LeanError::Internal(format!("Mathlib loading failed: {}", e)))?
         );
 
         // Initialize verification engine
@@ -204,10 +204,10 @@ impl LeanBridge {
             LeanVerifier::new(
                 server.clone(),
                 theorem_db.clone(),
-                cache_manager.verification.clone(),
+                Arc::new(cache_manager.verification.clone()),
                 config.verification_config.clone(),
             ).await
-            .map_err(|e| LeanError::Other(format!("Verifier initialization failed: {}", e)))?
+            .map_err(|e| LeanError::Internal(format!("Verifier initialization failed: {}", e)))?
         );
 
         let bridge = Self {
@@ -268,13 +268,13 @@ impl LeanBridge {
     /// Verify a proof using the integrated verification engine
     pub async fn verify_proof(&self, goal: LeanTerm, proof_hint: Option<LeanTerm>) -> Result<ProofResult> {
         self.verifier.verify(goal, proof_hint).await
-            .map_err(|e| LeanError::Other(format!("Verification failed: {}", e)))
+            .map_err(|e| LeanError::Internal(format!("Verification failed: {}", e)))
     }
 
     /// Attempt automated proof using mathlib theorems
     pub async fn auto_prove(&self, goal: LeanTerm) -> Result<ProofResult> {
         self.verifier.attempt_auto_proof(goal).await
-            .map_err(|e| LeanError::Other(format!("Auto proof failed: {}", e)))
+            .map_err(|e| LeanError::Internal(format!("Auto proof failed: {}", e)))
     }
 
     /// Search for applicable theorems
@@ -290,19 +290,19 @@ impl LeanBridge {
     /// Type check a term using the Lean server
     pub async fn type_check(&self, term: LeanTerm) -> Result<LeanTerm> {
         self.server.type_check(term).await
-            .map_err(|e| LeanError::Other(format!("Type check failed: {}", e)))
+            .map_err(|e| LeanError::Internal(format!("Type check failed: {}", e)))
     }
 
     /// Normalize a term using the Lean server
     pub async fn normalize(&self, term: LeanTerm) -> Result<LeanTerm> {
         self.server.normalize(term).await
-            .map_err(|e| LeanError::Other(format!("Normalization failed: {}", e)))
+            .map_err(|e| LeanError::Internal(format!("Normalization failed: {}", e)))
     }
 
     /// Apply a tactic to a goal
     pub async fn apply_tactic(&self, goal: LeanTerm, tactic: String) -> Result<LeanTerm> {
         self.server.apply_tactic(goal, tactic).await
-            .map_err(|e| LeanError::Other(format!("Tactic application failed: {}", e)))
+            .map_err(|e| LeanError::Internal(format!("Tactic application failed: {}", e)))
     }
 
     /// Get comprehensive bridge statistics

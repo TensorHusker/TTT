@@ -5,7 +5,7 @@ use std::fmt;
 
 pub type Result<T> = std::result::Result<T, LeanError>;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum LeanError {
     #[error("Translation failed: {0}")]
     Translation(String),

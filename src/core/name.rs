@@ -5,7 +5,7 @@
 //! systems like Lean that use named variables.
 
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// A name in TTT
 ///

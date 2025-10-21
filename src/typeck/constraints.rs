@@ -4,7 +4,7 @@
 //! metavariables during type inference.
 
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use crate::core::{Value, Level};
 
 /// Unification constraint between two values
@@ -134,7 +134,7 @@ impl MetaSubstitution {
                 } else {
                     // Apply to spine arguments
                     let new_spine: Vec<_> = neutral.spine.iter()
-                        .map(|arg| Rc::new(self.apply_to_value(arg)))
+                        .map(|arg| Arc::new(self.apply_to_value(arg)))
                         .collect();
                     Value::neutral(neutral.head, new_spine)
                 }

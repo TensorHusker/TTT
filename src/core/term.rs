@@ -4,14 +4,15 @@
 //! De Bruijn indices for variable representation. The design prioritizes
 //! structural sharing through Rc<T> and supports parallel substitution.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 /// Universe levels for type stratification
 ///
 /// Prevents Russell's paradox by stratifying types into a hierarchy:
 /// Type₀ : Type₁ : Type₂ : ...
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Level(pub u32);
 
 impl Level {
@@ -55,9 +56,9 @@ impl fmt::Display for Level {
 /// Core term structure for dependent type theory
 ///
 /// Uses De Bruijn indices for variables where 0 refers to the
-/// most recently bound variable. All composite terms use Rc<T>
+/// most recently bound variable. All composite terms use Arc<T>
 /// for structural sharing and efficient cloning.
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Term {
     /// Variable with De Bruijn index
     ///
@@ -75,29 +76,68 @@ pub enum Term {
     ///
     /// First component is domain A, second is codomain B which may
     /// depend on x (represented as De Bruijn index 0 in B)
-    Pi(Rc<Term>, Rc<Term>),
+    Pi(
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>,
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>
+    ),
 
     /// Lambda abstraction: λx.e
     ///
     /// Binds a variable in the body term. Variable is accessed
     /// via De Bruijn index 0 in the body
-    Lambda(Rc<Term>),
+    Lambda(
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>
+    ),
 
     /// Function application: f x
     ///
     /// Applies function f to argument x
-    App(Rc<Term>, Rc<Term>),
+    App(
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>,
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>
+    ),
 
     /// Let binding: let x = e₁ in e₂
     ///
     /// Syntactic sugar for (λx.e₂) e₁ but enables better optimization
-    Let(Rc<Term>, Rc<Term>),
+    Let(
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>,
+        #[serde(serialize_with = "arc_serde::serialize", deserialize_with = "arc_serde::deserialize")]
+        Arc<Term>
+    ),
 
     /// Metavariable for type inference
     ///
     /// Represents an unknown term to be solved during type checking
     /// The usize is a unique identifier for the metavariable
     Meta(usize),
+}
+
+mod arc_serde {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S, T>(arc: &Arc<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        arc.as_ref().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Arc<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        T::deserialize(deserializer).map(Arc::new)
+    }
 }
 
 /// Constructor functions and term analysis
@@ -117,25 +157,25 @@ impl Term {
     /// Create a dependent function type Π(x:A).B
     #[inline]
     pub fn pi(domain: Term, codomain: Term) -> Self {
-        Term::Pi(Rc::new(domain), Rc::new(codomain))
+        Term::Pi(Arc::new(domain), Arc::new(codomain))
     }
 
     /// Create a lambda abstraction λx.e
     #[inline]
     pub fn lambda(body: Term) -> Self {
-        Term::Lambda(Rc::new(body))
+        Term::Lambda(Arc::new(body))
     }
 
     /// Create a function application f x
     #[inline]
     pub fn app(function: Term, argument: Term) -> Self {
-        Term::App(Rc::new(function), Rc::new(argument))
+        Term::App(Arc::new(function), Arc::new(argument))
     }
 
     /// Create a let binding let x = e₁ in e₂
     #[inline]
     pub fn let_in(binding: Term, body: Term) -> Self {
-        Term::Let(Rc::new(binding), Rc::new(body))
+        Term::Let(Arc::new(binding), Arc::new(body))
     }
 
     /// Create a metavariable

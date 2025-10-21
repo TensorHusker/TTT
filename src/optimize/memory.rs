@@ -3,7 +3,7 @@
 //! This module provides advanced memory management techniques to reduce allocation
 //! overhead and enable structural sharing of identical terms through hash-consing.
 
-use std::rc::Rc;
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
@@ -134,9 +134,9 @@ impl TermArena {
 #[derive(Debug)]
 pub struct HashConsTable {
     /// Table mapping hashes to canonicalized terms
-    table: HashMap<u64, Rc<Term>>,
+    table: HashMap<u64, Arc<Term>>,
     /// Cache for recently accessed terms
-    cache: HashMap<u64, Rc<Term>>,
+    cache: HashMap<u64, Arc<Term>>,
     /// Maximum cache size
     max_cache_size: usize,
     /// Statistics
@@ -157,7 +157,7 @@ impl HashConsTable {
     }
 
     /// Hash-cons a term (get canonical representation)
-    pub fn hash_cons(&mut self, term: Term) -> Rc<Term> {
+    pub fn hash_cons(&mut self, term: Term) -> Arc<Term> {
         let hash = self.hash_term(&term);
 
         // Check cache first
@@ -182,7 +182,7 @@ impl HashConsTable {
         self.misses += 1;
         record_metric(|metrics| metrics.hash_cons_misses += 1);
 
-        let canonical = Rc::new(term);
+        let canonical = Arc::new(term);
         self.table.insert(hash, canonical.clone());
         self.add_to_cache(hash, canonical.clone());
 
@@ -190,7 +190,7 @@ impl HashConsTable {
     }
 
     /// Add term to cache with eviction if necessary
-    fn add_to_cache(&mut self, hash: u64, term: Rc<Term>) {
+    fn add_to_cache(&mut self, hash: u64, term: Arc<Term>) {
         if self.cache.len() >= self.max_cache_size {
             // Simple eviction: remove oldest entry
             if let Some(&first_key) = self.cache.keys().next() {
@@ -208,7 +208,7 @@ impl HashConsTable {
     }
 
     /// Hash-cons all subterms recursively
-    pub fn hash_cons_deep(&mut self, term: Term) -> Rc<Term> {
+    pub fn hash_cons_deep(&mut self, term: Term) -> Arc<Term> {
         let processed = match term {
             Term::Var(_) | Term::Universe(_) | Term::Meta(_) => term,
 
@@ -265,8 +265,8 @@ impl HashConsTable {
     /// Compact the table by removing unused entries
     pub fn compact(&mut self) {
         // Remove entries with refcount == 1 (only held by table)
-        self.table.retain(|_, term| Rc::strong_count(term) > 1);
-        self.cache.retain(|_, term| Rc::strong_count(term) > 1);
+        self.table.retain(|_, term| Arc::strong_count(term) > 1);
+        self.cache.retain(|_, term| Arc::strong_count(term) > 1);
     }
 }
 
@@ -416,24 +416,24 @@ pub fn arena_allocate<T>(value: T) -> &'static mut T {
 }
 
 /// Hash-cons a term using the global table
-pub fn hash_cons_term(term: Term) -> Rc<Term> {
+pub fn hash_cons_term(term: Term) -> Arc<Term> {
     unsafe {
         if let Some(ref mut table) = GLOBAL_HASH_CONS {
             table.hash_cons(term)
         } else {
             // Fallback: just wrap in Rc without hash-consing
-            Rc::new(term)
+            Arc::new(term)
         }
     }
 }
 
 /// Hash-cons a term deeply
-pub fn hash_cons_deep(term: Term) -> Rc<Term> {
+pub fn hash_cons_deep(term: Term) -> Arc<Term> {
     unsafe {
         if let Some(ref mut table) = GLOBAL_HASH_CONS {
             table.hash_cons_deep(term)
         } else {
-            Rc::new(term)
+            Arc::new(term)
         }
     }
 }
@@ -502,7 +502,7 @@ mod tests {
         let hc2 = table.hash_cons(term2);
 
         // Should be the same canonical representation
-        assert!(Rc::ptr_eq(&hc1, &hc2));
+        assert!(Arc::ptr_eq(&hc1, &hc2));
 
         let stats = table.stats();
         assert_eq!(stats.hits, 1);
@@ -538,6 +538,6 @@ mod tests {
         let hc2 = table.hash_cons_deep(term2);
 
         // Root terms should be shared
-        assert!(Rc::ptr_eq(&hc1, &hc2));
+        assert!(Arc::ptr_eq(&hc1, &hc2));
     }
 }
