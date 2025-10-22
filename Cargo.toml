@@ -1,0 +1,67 @@
+[package]
+name = "ttt"
+version = "0.1.0"
+edition = "2021"
+description = "Tiny Type Theory - A dependent type theory kernel"
+license = "MIT"
+repository = "https://github.com/tensorhusker/TTT"
+
+[dependencies]
+# Core dependencies
+thiserror = "1.0"
+im = "15.1"
+smallvec = "1.11"
+num_cpus = "1.16"
+ahash = "0.8"                  # Fast hasher
+bumpalo = "3.14"               # Arena allocator
+lru = "0.12"                   # LRU cache
+string-interner = "0.15"       # String interning
+atomic = "0.6"                 # Lock-free atomics
+rayon = "1.8"                  # Data parallelism
+crossbeam = "0.8"              # Lock-free data structures
+
+# Lean integration dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dashmap = "5.5"                # Concurrent hashmap for caching
+parking_lot = "0.12"           # Better Mutex/RwLock
+once_cell = "1.19"             # Lazy statics
+tracing = "0.1"                # Structured logging
+tracing-subscriber = "0.3"
+
+# Optional async support
+tokio = { version = "1.35", features = ["full"], optional = true }
+
+# Additional dependencies for mathlib integration
+bincode = "1.3"                 # Binary serialization
+chrono = { version = "0.4", features = ["serde"] }  # Date/time handling
+
+[dev-dependencies]
+proptest = "1.4"
+criterion = "0.5"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+pretty_assertions = "1.4"
+futures = "0.3"               # For async testing
+
+[[bench]]
+name = "type_check"
+harness = false
+
+[[bench]]
+name = "normalize"
+harness = false
+
+[[bench]]
+name = "mathlib_bench"
+harness = false
+
+[features]
+default = ["lean-integration"]
+lean-integration = ["tokio"]
+async-verification = ["tokio"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
