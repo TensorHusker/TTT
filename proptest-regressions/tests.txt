@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3777adfe820f3467d33ae5f92f16f6fca93d295e499ba0ac264d5df2edb0a61c # shrinks to term = App { func: Universe(0), arg: Var(0) }
